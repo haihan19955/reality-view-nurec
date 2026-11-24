@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+# caches, datasets, checkpoints and outputs live in work/ and are never committed (NuRec license)
+work/
+*.pt
+*.pth
+*.safetensors
+*.npy
+*.log

@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "realityview"
+version = "0.1.0"
+description = "Free-viewpoint ego surround view from six cameras: DA3 depth + one-step MeanFlow inpainting"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+  "torch>=2.4",
+  "diffusers",
+  "accelerate",
+  "safetensors",
+  "einops",
+  "numpy",
+  "scipy",
+  "opencv-python",
+  "pyyaml",
+  "huggingface_hub",
+]
+
+[project.optional-dependencies]
+nurec = ["grpcio", "grpcio-tools", "protobuf"]
+
+[tool.setuptools]
+packages = ["realityview"]

@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reality View Live</title>
+<style>
+  :root { --bg:#0a0d12; --panel:#121720; --line:rgba(255,255,255,.10); --fg:#e8edf4; --mut:#8b96a8; --acc:#4fd1ff; --warn:#ffb454; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; background:var(--bg); color:var(--fg); font:13px/1.5 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; }
+  .wrap { max-width:1240px; margin:0 auto; padding:16px; }
+  h1 { font-size:17px; font-weight:600; margin:0 0 2px; }
+  .sub { color:var(--mut); margin-bottom:12px; }
+  .main { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:12px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px; }
+  .t { color:var(--mut); font-size:12px; margin-bottom:6px; display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+  .stage { position:relative; }
+  canvas { width:100%; aspect-ratio:832/480; display:block; border-radius:8px; background:#000; cursor:grab; touch-action:none; }
+  canvas.drag { cursor:grabbing; }
+  .hint { position:absolute; left:10px; bottom:10px; background:rgba(0,0,0,.55); padding:3px 8px; border-radius:6px; font-size:12px; color:#dfe6ee; pointer-events:none; }
+  .gizmo { position:absolute; left:10px; top:10px; width:86px; height:86px; pointer-events:none; }
+  #surr { width:100%; border-radius:8px; display:block; margin-top:8px; }
+  .grp { margin-bottom:14px; }
+  .grp h3 { font-size:12px; color:var(--mut); font-weight:500; margin:0 0 6px; }
+  .btns { display:flex; flex-wrap:wrap; gap:6px; }
+  button { background:rgba(255,255,255,.06); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font:inherit; cursor:pointer; }
+  button.on { background:rgba(79,209,255,.18); border-color:var(--acc); }
+  label { display:grid; grid-template-columns:52px 1fr 48px; align-items:center; gap:8px; margin:4px 0; color:var(--mut); }
+  input[type=range] { width:100%; accent-color:var(--acc); }
+  .v { font-variant-numeric:tabular-nums; text-align:right; color:var(--fg); }
+  .stat { font-variant-numeric:tabular-nums; }
+  .note { color:var(--mut); font-size:12px; }
+  .warn { color:var(--warn); }
+  @media (max-width:860px){ .main{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Reality View · 实时自由视角</h1>
+  <div class="sub">视频学生模型（Wan2.1-1.3B + MeanFlow 1 步）实时生成，条件 = 6 路环视相机的点云投影到当前视角。在画面上拖动鼠标绕车旋转，滚轮调远近。</div>
+  <div class="main">
+    <div>
+      <div class="card">
+        <div class="t"><span id="scene">加载中…</span><span class="stat" id="st"></span></div>
+        <div class="stage">
+          <canvas id="cv" width="832" height="480"></canvas>
+          <svg class="gizmo" id="gizmo" viewBox="-50 -50 100 100"></svg>
+          <div class="hint" id="hint">拖动 = 绕车旋转 / 俯仰 · 滚轮 = 远近 · 双击 = 回到追尾</div>
+        </div>
+        <div class="t" style="margin-top:6px"><span class="stat" id="st2"></span><span class="note">右上小窗 = 模型输入的点云投影（黑色 = 没有相机看到）</span></div>
+      </div>
+      <div class="card" style="margin-top:12px">
+        <div class="t"><span>输入：6 路环视相机（左前 前 右前 / 左后 后 右后）</span><span class="stat" id="fr"></span></div>
+        <img id="surr" alt="">
+      </div>
+    </div>
+    <div class="card">
+      <div class="grp"><h3>视角预设</h3>
+        <div class="btns">
+          <button data-p="chase">追尾</button><button data-p="far">远追尾</button><button data-p="left">左后方</button>
+          <button data-p="right">右后方</button><button data-p="lside">左侧</button><button data-p="rside">右侧</button>
+          <button data-p="front">车前</button><button data-p="top">高位</button>
+        </div>
+        <div class="note" id="modeNote" style="margin-top:6px"></div>
+      </div>
+      <div class="grp"><h3>相机</h3>
+        <label>环绕<input id="yaw" type="range" min="0" max="360" step="1"><span class="v" id="yawV"></span></label>
+        <label>俯仰<input id="pitch" type="range" min="5" max="38" step="1"><span class="v" id="pitchV"></span></label>
+        <label>距离<input id="dist" type="range" min="5" max="13" step="0.5"><span class="v" id="distV"></span></label>
+      </div>
+      <div class="grp"><h3>显示</h3>
+        <div class="btns"><button id="car" class="on">自车模型</button><button id="inset" class="on">点云小窗</button></div>
+      </div>
+      <div class="grp"><h3>播放</h3>
+        <div class="btns"><button id="pause">⏸ 暂停</button><button id="restart">⏮ 从头开始</button></div>
+      </div>
+      <div class="grp"><h3>耗时（每段 8 帧）</h3><div class="note stat" id="tm">—</div></div>
+    </div>
+  </div>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+// yaw: 180 = behind the car, 90 = left side, 0 = in front looking back; pitch = elevation; dist in metres
+const PRESETS = { chase: [180, 16, 8], far: [180, 24, 11], left: [140, 18, 8], right: [220, 18, 8],
+                  lside: [90, 15, 8], rside: [270, 15, 8], front: [0, 15, 9], top: [180, 38, 8] };
+const LIM = { pitch: [5, 38], dist: [5, 13] };
+const V = { yaw: 180, pitch: 16, dist: 8, car: true, inset: true, pause: false };
+const ctx = $("#cv").getContext("2d");
+let seq = 0, queue = [], gen = 0, serverFps = 8, lastFrame = 0, switchT = 0, latency = null, free = null, served = null;
+
+const wrapYaw = y => ((y % 360) + 360) % 360;
+function clamp() { for (const k in LIM) V[k] = Math.min(LIM[k][1], Math.max(LIM[k][0], V[k])); V.yaw = wrapYaw(V.yaw); }
+function syncUI() {
+  $("#yaw").value = V.yaw; $("#pitch").value = V.pitch; $("#dist").value = V.dist;
+  $("#yawV").textContent = Math.round(V.yaw) + "°"; $("#pitchV").textContent = Math.round(V.pitch) + "°"; $("#distV").textContent = V.dist.toFixed(1) + " m";
+  document.querySelectorAll("button[data-p]").forEach(b => { const p = PRESETS[b.dataset.p];
+    b.classList.toggle("on", Math.abs(p[0] - V.yaw) < 1 && Math.abs(p[1] - V.pitch) < 1 && Math.abs(p[2] - V.dist) < .3); });
+  drawGizmo();
+}
+function drawGizmo() {      // top view: car (front up) and where the requested / current camera is
+  const pt = (yaw, r) => { const a = yaw * Math.PI / 180; return [-Math.sin(a) * r, -Math.cos(a) * r]; };   // rig x forward = up, y left = left
+  const [rx, ry] = pt(V.yaw, 14 + V.dist * 2.4);
+  let cur = "";
+  if (served) { const [cx, cy] = pt(served.yaw, 14 + served.dist * 2.4); cur = `<circle cx="${cx}" cy="${cy}" r="4" fill="#fff"/>`; }
+  $("#gizmo").innerHTML = `<circle r="47" fill="rgba(0,0,0,.45)" stroke="rgba(255,255,255,.2)"/>
+    <rect x="-5" y="-11" width="10" height="22" rx="3" fill="#4fd1ff"/><path d="M-4 -11 L0 -16 L4 -11Z" fill="#4fd1ff"/>
+    <line x1="0" y1="0" x2="${rx}" y2="${ry}" stroke="rgba(79,209,255,.5)" stroke-dasharray="2 2"/>
+    <circle cx="${rx}" cy="${ry}" r="5" fill="none" stroke="#4fd1ff" stroke-width="2"/>${cur}`;
+}
+
+let pending = null, lastSend = 0;
+function send(extra) {
+  const q = new URLSearchParams({ yaw: V.yaw, pitch: V.pitch, dist: V.dist, car: V.car ? 1 : 0, inset: V.inset ? 1 : 0, pause: V.pause ? 1 : 0, v: gen, ...extra });
+  fetch("/set?" + q); lastSend = performance.now();
+}
+function setView(changes) {
+  Object.assign(V, changes); clamp(); syncUI();
+  if (free === false) {                       // chase-only model restarts on every change: debounce
+    queue = []; gen++; switchT = performance.now();
+    clearTimeout(pending); pending = setTimeout(() => send({}), 150); return;
+  }
+  if (!switchT) switchT = performance.now();
+  previewing = true; wantPreview = true; kickPreview();
+  // free view: stream the drag to the generator (throttled to ~12 updates/s, the last position always goes out)
+  if (pending) return;
+  pending = setTimeout(() => { pending = null; send({}); }, Math.max(0, 80 - (performance.now() - lastSend)));
+}
+
+// instant view while dragging: the last generated frame reprojected into the new camera (server /preview, ~10 ms);
+// shown until generated frames from (close to) the requested view arrive
+let previewing = false, wantPreview = false, previewBusy = false, shownFrame = -1;
+async function kickPreview() {
+  if (previewBusy || shownFrame < 0) return;
+  previewBusy = true;
+  while (wantPreview && previewing) {
+    wantPreview = false;
+    const q = new URLSearchParams({ frame: shownFrame, yaw: V.yaw, pitch: V.pitch, dist: V.dist });
+    try {
+      const r = await fetch("/preview?" + q);
+      if (r.status === 200 && previewing) {
+        const bmp = await createImageBitmap(await r.blob());
+        ctx.drawImage(bmp, 0, 0, 832, 480); bmp.close();
+        served = JSON.parse(r.headers.get("X-Cam")); drawGizmo();
+        $("#st2").textContent = `拖动中：即时重投影预览，生成画面随后接上`;
+      }
+    } catch (e) {}
+  }
+  previewBusy = false;
+}
+const near = c => c && Math.abs(((c.yaw - V.yaw + 540) % 360) - 180) < 3 && Math.abs(c.pitch - V.pitch) < 2 && Math.abs(c.dist - V.dist) < 0.3;
+document.querySelectorAll("button[data-p]").forEach(b => b.onclick = () => { const [yaw, pitch, dist] = PRESETS[b.dataset.p]; setView({ yaw, pitch, dist }); });
+for (const k of ["yaw", "pitch", "dist"]) $("#" + k).oninput = e => setView({ [k]: +e.target.value });
+$("#car").onclick = () => { V.car = !V.car; $("#car").classList.toggle("on", V.car); send({}); };
+$("#inset").onclick = () => { V.inset = !V.inset; $("#inset").classList.toggle("on", V.inset); send({}); };
+$("#pause").onclick = () => { V.pause = !V.pause; $("#pause").textContent = V.pause ? "▶ 播放" : "⏸ 暂停"; send({}); };
+$("#restart").onclick = () => { queue = []; gen++; switchT = performance.now(); send({ restart: 1 }); };
+
+// mouse / touch drag on the video
+const cv = $("#cv"); let drag = null;
+cv.addEventListener("pointerdown", e => { drag = { x: e.clientX, y: e.clientY, yaw: V.yaw, pitch: V.pitch }; cv.setPointerCapture(e.pointerId); cv.classList.add("drag"); });
+cv.addEventListener("pointermove", e => {
+  if (!drag) return;
+  const s = 360 / cv.clientWidth;        // a full drag across the image = one turn around the car
+  setView({ yaw: drag.yaw - (e.clientX - drag.x) * s, pitch: drag.pitch + (e.clientY - drag.y) * s * 0.5 });
+});
+const end = () => { drag = null; cv.classList.remove("drag"); };
+cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
+cv.addEventListener("wheel", e => { e.preventDefault(); setView({ dist: V.dist * Math.exp(e.deltaY * 0.001) }); }, { passive: false });
+cv.addEventListener("dblclick", () => { const [yaw, pitch, dist] = PRESETS.chase; setView({ yaw, pitch, dist }); });
+
+async function fetchLoop() {
+  while (true) {
+    // back-pressure: keep the client buffer short so the camera follows the drag quickly
+    if (queue.length >= (free ? 6 : 12)) { await new Promise(r => setTimeout(r, 30)); continue; }
+    const g = gen;
+    try {
+      const r = await fetch(`/next?after=${seq}`);
+      if (r.status === 200) {
+        seq = +r.headers.get("X-Seq");
+        const st = JSON.parse(r.headers.get("X-Stats") || "{}");
+        const bmp = await createImageBitmap(await r.blob());
+        if (free === null && st.free !== undefined) {
+          free = st.free;
+          $("#modeNote").innerHTML = free ? "自由视角模型：拖动时画面即时跟手（用上一帧生成画面 + 点云深度重投影），松手后约 1 秒内换成新视角的生成画面。可用范围：俯仰 5°–38°、相机高度 ≤ 5.5 m，再高 NuRec 教师渲染不出干净的画面。"
+                                          : "<span class='warn'>当前是只训练了追尾视角的旧模型：每次换视角都会重新开始，非追尾视角效果差。</span>";
+        }
+        const cam = JSON.parse(r.headers.get("X-Cam") || "null");
+        if (free || (g === gen && r.headers.get("X-View") === String(gen))) queue.push({ bmp, frame: +r.headers.get("X-Frame"), st, cam });
+      } else {
+        const st = await (await fetch("/stats")).json();
+        $("#st").textContent = st.status === "loading" ? "模型和深度加载中（约 1 分钟）…" : st.status;
+      }
+    } catch (e) { await new Promise(r => setTimeout(r, 500)); }
+  }
+}
+function showLoop(now) {
+  // play at the generation rate (capped at the 10 Hz of the recording); a bit faster when the buffer grows
+  const rate = serverFps * (queue.length > 8 ? 1.25 : 1.0);
+  const interval = 1000 / Math.min(10, Math.max(1, rate));
+  // while the reprojection preview is up, generated frames still on their way to the requested view are skipped
+  // (the scene time of the preview follows them, so the car keeps driving while you drag)
+  while (previewing && queue.length && !near(queue[0].cam)) {
+    const f = queue.shift(); f.bmp.close();
+    if (now - lastFrame >= interval) { shownFrame = f.frame; lastFrame = now; wantPreview = true; kickPreview(); }
+  }
+  if (previewing && queue.length && !drag) { previewing = false; lastFrame = 0; }
+  if (queue.length && !previewing && now - lastFrame >= interval && !V.pause) {
+    const f = queue.shift(); lastFrame = now; shownFrame = f.frame;
+    const st = f.st; serverFps = st.fps || serverFps;
+    const cam = f.cam || st.cam;
+    if (switchT && near(cam)) { latency = now - switchT; switchT = 0; }
+    if (free === false && switchT) { latency = now - switchT; switchT = 0; }
+    ctx.drawImage(f.bmp, 0, 0, 832, 480); f.bmp.close();
+    if (cam) { served = cam; drawGizmo(); }
+    $("#scene").textContent = `NuRec 场景 ${st.scene}` + (st.held_out ? "（训练时没见过）" : "（训练场景）");
+    $("#fr").textContent = `帧 ${f.frame} / ${st.n}`;
+    const rt = st.fps >= 10 ? "≥ 实时" : `实时的 ${(st.fps / 10 * 100).toFixed(0)}%`;
+    $("#st").textContent = `生成 ${st.fps.toFixed(1)} 帧/秒（录制 10 帧/秒，${rt}）`;
+    $("#st2").textContent = `缓冲 ${queue.length} 帧` + (latency !== null ? ` · 上次换视角到画面转到位 ${(latency / 1000).toFixed(1)} 秒` : "");
+    if (st.chunk_ms) { const m = st.chunk_ms; $("#tm").innerHTML = `点云投影 ${m.warp} ms<br>VAE 编码 ${m.encode} ms<br>生成（1 步）${m.generate} ms<br>VAE 解码 ${m.decode} ms<br>合计 ${m.total} ms`; }
+    if (f.frame % 2 === 0) $("#surr").src = `/surround?i=${f.frame}`;
+  }
+  requestAnimationFrame(showLoop);
+}
+syncUI(); send({}); fetchLoop(); requestAnimationFrame(showLoop);
+</script>
+</body>
+</html>

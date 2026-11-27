@@ -1,6 +1,12 @@
 """DrivingForward (SF mode, nuScenes weights) as a library on NuRec surround frames: 6 views -> per-pixel 3D Gaussians -> render any camera.
 Bypasses the nuScenes dataloader / losses (no LPIPS / torchvision downloads). Rig/ego frame: x fwd, y left, z up (same as nuScenes ego)."""
-import os, sys, types, yaml, numpy as np, torch, torch.nn.functional as F
+import os
+import sys
+import types
+import yaml
+import numpy as np
+import torch
+import torch.nn.functional as F
 from realityview import paths
 DF = paths.model("DrivingForward"); sys.path.insert(0, DF)
 
@@ -90,7 +96,10 @@ class DFRunner:
 
 
 if __name__ == "__main__":   # smoke test on one NuRec frame: re-render the inputs + 2 targets
-    import json, glob, cv2, time
+    import json
+    import glob
+    import cv2
+    import time
     d = sorted(glob.glob(os.path.join(paths.NUREC_DATA, "*", "meta.json")))[0]; meta = json.load(open(d)); d = os.path.dirname(d)
     fr = meta["frames"][40]; ins = [v for v in fr["views"] if v["kind"] == "in"]; tg = [v for v in fr["views"] if v["kind"] != "in"]
     r = DFRunner()

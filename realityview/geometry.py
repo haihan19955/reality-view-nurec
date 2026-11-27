@@ -134,6 +134,17 @@ def look_at(pos, target):
     return M
 
 
+def chase_camera(back, height, yaw=0.0, look_ahead=8.0, center_x=1.4):
+    """Rig-fixed version of the teacher's chase camera (scripts/nurec/render_teacher.py): `back` m behind the rear axle,
+    `height` m up, looking at a point `look_ahead` m ahead at 0.6 m. yaw (deg, left +) swings the whole rig around the
+    car's vertical axis: 0 = behind, 90 = from the right side looking left, 180 = in front looking back."""
+    pos, target = np.array([-back, 0.0, height]), np.array([look_ahead, 0.0, 0.6])
+    a = math.radians(yaw)
+    R = np.array([[math.cos(a), -math.sin(a), 0], [math.sin(a), math.cos(a), 0], [0, 0, 1.0]])
+    c = np.array([center_x, 0.0, 0.0])
+    return look_at(R @ (pos - c) + c, R @ (target - c) + c)
+
+
 def orbit_camera(yaw, pitch, dist, target=LOOK_AT):
     """Orbit camera around the ego. yaw 180 = behind the car, pitch = elevation (degrees), dist in metres."""
     y, p = math.radians(yaw), math.radians(pitch)

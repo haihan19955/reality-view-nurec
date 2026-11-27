@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "realityview"
-version = "0.1.0"
-description = "Free-viewpoint ego surround view from six cameras: DA3 depth + one-step MeanFlow inpainting"
+version = "0.2.0"
+description = "Free-viewpoint ego surround view from six cameras: point-cloud geometry + one-step generative models, trained on NVIDIA NuRec scenes"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
 dependencies = [
   "torch>=2.4",
-  "diffusers",
+  "diffusers>=0.33",
   "accelerate",
   "safetensors",
   "einops",
@@ -23,7 +23,28 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# NuRec renderer client (scripts/nurec/)
 nurec = ["grpcio", "grpcio-tools", "protobuf"]
+# video student (scripts/student/, viewer/live.py): Wan2.1 LoRA, DINOv3 features, video export
+student = ["peft", "transformers>=4.56", "imageio-ffmpeg", "pillow"]
+dev = ["ruff"]
+
+[project.urls]
+Repository = "https://github.com/haihan19955/reality-view-nurec"
 
 [tool.setuptools]
 packages = ["realityview"]
+
+[tool.ruff]
+line-length = 130
+target-version = "py310"
+extend-exclude = ["work"]
+
+[tool.ruff.lint]
+# errors and real bugs only; the research code keeps short one-line statements and lambdas
+select = ["E4", "E7", "E9", "F"]
+ignore = ["E701", "E702", "E731", "E741"]
+
+[tool.ruff.lint.per-file-ignores]
+# third-party repos are put on sys.path before importing them
+"benchmarks/depth/drivingforward.py" = ["E402"]

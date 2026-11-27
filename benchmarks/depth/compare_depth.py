@@ -13,7 +13,14 @@ coloured points into each target view, PSNR on covered pixels + coverage. Also t
     python benchmarks/depth/compare_depth.py [--scenes 6] [--frames 4]
 Needs Depth-Anything-V2 (metric_depth, vkitti vitl weights), DA3-LARGE-1.1, DA3METRIC-LARGE and DrivingForward in $RV_MODELS.
 """
-import argparse, os, sys, json, time, numpy as np, cv2, torch
+import argparse
+import os
+import sys
+import json
+import time
+import numpy as np
+import cv2
+import torch
 from realityview import paths
 from realityview.dataset import list_scenes, read_lidar_depth
 from realityview.depth import MetricDepth

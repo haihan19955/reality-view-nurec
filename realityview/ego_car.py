@@ -2,7 +2,8 @@
 Rig frame: x fwd, y left, z up, origin = rear axle on the ground. Camera OpenCV pinhole (c2rig 4x4).
 Painter's algorithm with flat Lambert shading + a soft contact shadow; no scene depth needed (the ego is always in front of
 whatever sits in its footprint)."""
-import numpy as np, cv2
+import numpy as np
+import cv2
 
 L0, L1, HW = -1.02, 3.70, 0.94        # rear / front bumper x, half width (m)
 WB, WR = 2.88, 0.34                   # wheelbase, wheel radius
